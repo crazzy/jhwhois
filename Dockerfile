@@ -14,5 +14,4 @@ WORKDIR /opt/jhwhois
 
 RUN pip3 install --no-cache-dir -r requirements
 
-# TODO: Figure out how to pass a commandline to this
 ENTRYPOINT ["python3", "/opt/jhwhois/jhwhois.py"]
