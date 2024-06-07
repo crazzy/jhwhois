@@ -1,4 +1,5 @@
 name: Publish jhwhois distribution to PyPI TestPyPI
+on: push
 jobs:
   build:
     name: Build distribution
