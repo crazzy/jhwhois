@@ -22,3 +22,7 @@ I'm a network engineer, not a developer, so I'm 100% positive there's better way
 ## Documentation?
 
 Read the code.
+
+## So how about using this?
+
+    pip install jhwhois
