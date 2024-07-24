@@ -23,6 +23,7 @@
 # SOFTWARE.
 
 import argparse
+import ipaddress
 import pyunycode
 import re
 import socket
