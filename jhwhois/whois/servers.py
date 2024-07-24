@@ -44,6 +44,11 @@ WC_WHOIS_SERVERS = {
     'tld_se': {
         'hostname': 'whois.iis.se'
     },
+    'ipv4': {
+        'cidrs': {
+            '169.254.0.0/16': 'whois.arin.net'
+        }
+    }
 }
 
 WC_WHOIS_BANNED_REFERRALS = [

@@ -112,9 +112,13 @@ class ArgumentParser():
             self._guess_by_asn(asn_match.group(1))
             self.args.type = 'asn'
         elif validators.ipv4(self.args.query) or validators.ipv6(self.args.query):
-            # TODO: This is not guaranteed to work all the time, there's lots of
-            # corner cases, like JP-NIC, BR-NIC etc...
-            self.args.host = self._get_iana_referral_server(self.args.query)
+            for cidr, srv in WC_WHOIS_SERVERS['ipv4']['cidrs'].items():
+                if ipaddress.ip_address(self.args.query.split("/")[0]) in ipaddress.ip_network(cidr):
+                    self.args.host = srv
+            if not self.args.host:
+                # TODO: This is not guaranteed to work all the time, there's lots of
+                # corner cases, like JP-NIC, BR-NIC etc...
+                self.args.host = self._get_iana_referral_server(self.args.query)
             self.args.type = 'ip'
         elif validators.domain(self.args.query.lower()):
             self.args.query = self.args.query.lower()
