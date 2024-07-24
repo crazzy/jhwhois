@@ -30,4 +30,4 @@ Aims to gather the most correct results.
 __author__ = "Johan Hedberg"
 __copyright__ = "Copyright 2024, Johan Hedberg"
 __license__ = "MIT License"
-__version__ = "0.2.4"
+__version__ = "0.2.5"
