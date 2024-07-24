@@ -89,6 +89,8 @@ class ArgumentParser():
             self._guess_whois_server()
         if not self.args.host and self.args.type == 'raw':
             self.args.host = self._get_iana_referral_server(self.args.query)
+        if not self.args.type:
+            self.args.type = 'raw'
         return self.args
 
     def show_help(self):
