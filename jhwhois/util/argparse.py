@@ -116,6 +116,15 @@ class ArgumentParser():
             for cidr, srv in WC_WHOIS_SERVERS['ipv4']['cidrs'].items():
                 if ipaddress.ip_address(self.args.query.split("/")[0]) in ipaddress.ip_network(cidr):
                     self.args.host = srv
+            # 0.0.0.0/0 and 0.0.0.0/32 special cases
+            # This should probably be externalised from the argparser
+            # (This entire function likely doesn't belong here either)
+            if self.args.query in ['0.0.0.0', '0.0.0.0/32']:
+                self.args.query = 'NET-0-0-0-0-2'
+                self.args.host = 'whois.arin.net'
+            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('0.0.0.0/0'):
+                self.args.query = 'NET-0-0-0-0-1'
+                self.args.host = 'whois.arin.net'
             if not self.args.host:
                 # TODO: This is not guaranteed to work all the time, there's lots of
                 # corner cases, like JP-NIC, BR-NIC etc...
