@@ -56,11 +56,13 @@ class WhoisClient:
             self._guess_whois_server()
             args = self.args
         if not args.host and args.type == 'raw':
-            getref = self._get_iana_referral_server(args.query)
-            if 'IANA WHOIS server' in getref:
-                return getref
-            self.args.host = getref
+            self.args.host = self._get_iana_referral_server(args.query)
             args = self.args
+        # IANA referral check indicates this is actually handled by IANA
+        # so we fast exit on that one (example.com is an example of this)
+        if 'IANA WHOIS server' in args.host:
+            return args.host
+        # Run whois query
         result = self.query(args.host, args.port, args.query)
         if not recursion:
             recursion = []
@@ -92,7 +94,7 @@ class WhoisClient:
         query = f"{query}\r\n".encode()
 
         # Resolve the hostname
-        hostname, aliaslist, ipaddrlist = self._gethostbyname(hostname)
+        hostname, _, ipaddrlist = self._gethostbyname(hostname)
 
         # Get and check that we have a connection
         for ip in ipaddrlist:
@@ -228,10 +230,10 @@ class WhoisClient:
             if self.args.query in ['0.0.0.0', '0.0.0.0/32']:
                 self.args.query = 'NET-0-0-0-0-2'
                 self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
-            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('0.0.0.0/0'):
-                self.args.query = 'NET-0-0-0-0-1'
+            elif ipaddress.ip_address(self.args.query.split('/')[0]) in ipaddress.ip_network('224.0.0.0/3'):
                 self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
-            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('224.0.0.0/3'):
+            elif ipaddress.ip_address(self.args.query.split('/')[0]) in ipaddress.ip_network('0.0.0.0/8'):
+                self.args.query = 'NET-0-0-0-0-1'
                 self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
             if not self.args.host:
                 # TODO: This is not guaranteed to work all the time, there's lots of
