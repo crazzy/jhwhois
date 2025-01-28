@@ -31,11 +31,17 @@ from jhwhois.whois.whoisc import WhoisClient
 
 
 def run():
+    """
+    Main entry point
+    """
     try:
         args = ArgumentParser().run()
-        wc = WhoisClient()
-        ret = wc.lookup(args)
-        print(ret)
+        if 'IANA WHOIS server' in args.host:
+            print(args.host)
+        else:
+            wc = WhoisClient()
+            ret = wc.lookup(args)
+            print(ret)
         sys.exit(0)
     except WCException as e:
         print("{}: {}".format(type(e).__name__, str(e)))

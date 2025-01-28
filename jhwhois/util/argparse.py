@@ -31,7 +31,6 @@ import sys
 import validators
 from jhwhois import __version__
 from jhwhois.whois.asn_mapping import WC_ASN_MAPPING
-from jhwhois.whois.exceptions import WCReferralNotFoundException
 from jhwhois.whois.servers import WC_WHOIS_SERVERS
 from jhwhois.whois.whoisc import WhoisClient
 
@@ -121,10 +120,12 @@ class ArgumentParser():
             # (This entire function likely doesn't belong here either)
             if self.args.query in ['0.0.0.0', '0.0.0.0/32']:
                 self.args.query = 'NET-0-0-0-0-2'
-                self.args.host = 'whois.arin.net'
+                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
             elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('0.0.0.0/0'):
                 self.args.query = 'NET-0-0-0-0-1'
-                self.args.host = 'whois.arin.net'
+                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
+            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('224.0.0.0/3'):
+                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
             if not self.args.host:
                 # TODO: This is not guaranteed to work all the time, there's lots of
                 # corner cases, like JP-NIC, BR-NIC etc...
@@ -164,6 +165,6 @@ class ArgumentParser():
         ret = wc.query(WC_WHOIS_SERVERS['IANA']['hostname'], socket.getservbyname('whois', 'tcp'), query)
         referral = wc.parse_iana_referral(ret)
         if not referral:
-            raise WCReferralNotFoundException("Can't find IANA referral for {}".format(query))
+            return ret
         else:
             return referral
