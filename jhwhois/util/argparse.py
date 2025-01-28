@@ -23,19 +23,15 @@
 # SOFTWARE.
 
 import argparse
-import ipaddress
-import pyunycode
-import re
 import socket
 import sys
-import validators
 from jhwhois import __version__
-from jhwhois.whois.asn_mapping import WC_ASN_MAPPING
-from jhwhois.whois.servers import WC_WHOIS_SERVERS
-from jhwhois.whois.whoisc import WhoisClient
 
 
 class ArgumentParser():
+    """
+    As class name suggest, this is the argument parser
+    """
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             add_help=False,
@@ -85,86 +81,9 @@ class ArgumentParser():
         self.args.query = " ".join(self.args.query)
         if not self.args.port:
             self.args.port = socket.getservbyname('whois', 'tcp')
-        if not self.args.host:
-            self._guess_whois_server()
-        if not self.args.host and self.args.type == 'raw':
-            self.args.host = self._get_iana_referral_server(self.args.query)
         if not hasattr(self.args, 'type'):
             self.args.type = 'raw'
         return self.args
 
     def show_help(self):
         self.parser.print_help()
-
-    def _guess_whois_server(self):
-        if ' ' in self.args.query:
-            self.args.type = 'raw'
-            return
-
-        # Detect IDN domain names
-        try:
-            self.args.query.encode('ascii')
-        except UnicodeEncodeError:
-            self.args.query = pyunycode.convert(self.args.query)
-
-        asn_match = re.fullmatch(r'^[aA][sS]([0-9]+)$', self.args.query)
-        if asn_match:
-            self._guess_by_asn(asn_match.group(1))
-            self.args.type = 'asn'
-        elif validators.ipv4(self.args.query) or validators.ipv6(self.args.query):
-            for cidr, srv in WC_WHOIS_SERVERS['ipv4']['cidrs'].items():
-                if ipaddress.ip_address(self.args.query.split("/")[0]) in ipaddress.ip_network(cidr):
-                    self.args.host = srv
-            # 0.0.0.0/0 and 0.0.0.0/32 special cases
-            # This should probably be externalised from the argparser
-            # (This entire function likely doesn't belong here either)
-            if self.args.query in ['0.0.0.0', '0.0.0.0/32']:
-                self.args.query = 'NET-0-0-0-0-2'
-                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
-            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('0.0.0.0/0'):
-                self.args.query = 'NET-0-0-0-0-1'
-                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
-            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('224.0.0.0/3'):
-                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
-            if not self.args.host:
-                # TODO: This is not guaranteed to work all the time, there's lots of
-                # corner cases, like JP-NIC, BR-NIC etc...
-                self.args.host = self._get_iana_referral_server(self.args.query)
-            self.args.type = 'ip'
-        elif validators.domain(self.args.query.lower()):
-            self.args.query = self.args.query.lower()
-            self.args.type = 'domain'
-            tld = self.args.query.split(".")[-1]
-            if "tld_{}".format(tld) in WC_WHOIS_SERVERS.keys():
-                self.args.host = WC_WHOIS_SERVERS['tld_{}'.format(tld)]['hostname']
-            else:
-                self.args.host = self._get_iana_referral_server(self.args.query)
-        elif 'RIPE' in self.args.query:  # Highly likely a RIPE DB resource
-            self.args.host = WC_WHOIS_SERVERS['RIPE']['hostname']
-            self.args.type = 'raw'
-        else:
-            self.args.type = 'raw'
-
-    def _guess_by_asn(self, asn):
-        for asrange, refhost in WC_ASN_MAPPING.items():
-            if '-' not in asrange and (int(asrange) == int(asn)):
-                self.args.host = refhost
-                break
-            elif '-' in asrange:
-                rangeparts = asrange.split('-')
-                lpart = int(rangeparts[0])
-                rpart = int(rangeparts[1])
-                if (lpart <= int(asn)) and (int(asn) <= rpart):
-                    self.args.host = refhost
-                    break
-        if not self.args.host:
-            self.args.host = WC_WHOIS_SERVERS['IANA']['hostname']
-
-    def _get_iana_referral_server(self, query):
-        wc = WhoisClient()
-        ret = wc.query(WC_WHOIS_SERVERS['IANA']['hostname'], socket.getservbyname('whois', 'tcp'), query)
-        referral = wc.parse_iana_referral(ret)
-        if not referral:
-            return ret
-        else:
-            return referral

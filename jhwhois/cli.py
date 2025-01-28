@@ -36,13 +36,12 @@ def run():
     """
     try:
         args = ArgumentParser().run()
-        if 'IANA WHOIS server' in args.host:
-            print(args.host)
-        else:
-            wc = WhoisClient()
-            ret = wc.lookup(args)
-            print(ret)
+        wc = WhoisClient(args)
+        ret = wc.lookup()
+        print(ret)
         sys.exit(0)
     except WCException as e:
-        print("{}: {}".format(type(e).__name__, str(e)))
+        exctype = type(e).__name__
+        estr = str(e)
+        print(f"{exctype}: {estr}")
         sys.exit(1)

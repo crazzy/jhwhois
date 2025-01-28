@@ -23,21 +23,47 @@
 # SOFTWARE.
 
 import io
+import ipaddress
 import re
 import socket
+
+import pyunycode
+import validators
+
 from jhwhois.whois.exceptions import WCConnectionFailedException
 from jhwhois.whois.exceptions import WCDNSLookupFailedException
-from jhwhois.whois.servers import WC_WHOIS_BANNED_REFERRALS
+from jhwhois.whois.asn_mapping import WC_ASN_MAPPING
+from jhwhois.whois.servers import WC_WHOIS_BANNED_REFERRALS, WC_WHOIS_SERVERS
 
 WC_SOCK_TIMEOUT = 10
 
 
 class WhoisClient:
-    def __init__(self):
+    """
+    As class name suggest, this is a whois client
+    """
+    def __init__(self, args):
         self.sock = None
+        self.args = args
 
-    def lookup(self, args, recursion=[]):
+    def lookup(self, args=None, recursion=None):
+        """
+        Whois lookups happens here
+        """
+        if not args:
+            args = self.args
+        if not args.host:
+            self._guess_whois_server()
+            args = self.args
+        if not args.host and args.type == 'raw':
+            getref = self._get_iana_referral_server(args.query)
+            if 'IANA WHOIS server' in getref:
+                return getref
+            self.args.host = getref
+            args = self.args
         result = self.query(args.host, args.port, args.query)
+        if not recursion:
+            recursion = []
         if args.type == 'domain':
             referral = self._parse_domain_referral(result)
             # TODO: Add a validate referral function
@@ -45,7 +71,7 @@ class WhoisClient:
                 args2 = args
                 args2.host = referral
                 recursion.append(referral)
-                result += "\n[Referral server {}]\n".format(referral)
+                result += f"\n[Referral server {referral}]\n"
                 result += self.lookup(args2, recursion)
         if args.type == 'asn':
             referral = self._parse_asn_referral(result)
@@ -53,13 +79,17 @@ class WhoisClient:
                 args2 = args
                 args2.host = referral
                 recursion.append(referral)
-                result = "\n[Referral server {}]\n".format(referral)
+                result = f"\n[Referral server {referral}]\n"
                 result += self.lookup(args2, recursion)
         return result
 
     def query(self, hostname, port, query):
+        """
+        Support-function to actually do the
+        whois query over the network
+        """
         # Prepare query
-        query = "{}\r\n".format(query).encode()
+        query = f"{query}\r\n".encode()
 
         # Resolve the hostname
         hostname, aliaslist, ipaddrlist = self._gethostbyname(hostname)
@@ -70,7 +100,7 @@ class WhoisClient:
             if self.sock:
                 break
         if not self.sock:
-            raise WCConnectionFailedException("Unable to connect to host {}".format(hostname))
+            raise WCConnectionFailedException(f"Unable to connect to host {hostname}")
 
         # Send query and get response
         self.sock.sendall(query)
@@ -82,8 +112,8 @@ class WhoisClient:
     def _gethostbyname(self, hostname):
         try:
             hostname, aliaslist, ipaddrlist = socket.gethostbyname_ex(hostname)
-        except socket.gaierror:
-            raise WCDNSLookupFailedException("Unable to lookup host {}".format(hostname))
+        except socket.gaierror as e:
+            raise WCDNSLookupFailedException(f"Unable to lookup host {hostname}") from e
         return (hostname, aliaslist, ipaddrlist)
 
     def _conn(self, ip, port):
@@ -117,19 +147,24 @@ class WhoisClient:
             return data.decode('iso-8859-1')
 
     def parse_iana_referral(self, data):
+        """
+        Gets the referral entry from IANA whois result
+        """
         for line in io.StringIO(data):
             if line.startswith('refer:'):
                 return str(line.split()[-1])
         return None
 
     def _parse_domain_referral(self, data):
+        """
+        Gets ICANN-style referral entries
+        """
         for line in io.StringIO(data):
             if line.lstrip().startswith('Registrar WHOIS Server:'):
                 referral = str(line.split()[-1])
                 if re.match(r'^[a-z0-9]+://.*', referral):
                     return None
-                else:
-                    return referral
+                return referral
         return None
 
     def _parse_asn_referral(self, data):
@@ -137,3 +172,82 @@ class WhoisClient:
             if line.lstrip().startswith('ReferralServer:'):
                 return str(line.split()[-1]).replace('whois://', '')
         return None
+
+    def _get_iana_referral_server(self, query):
+        ret = self.query(
+            WC_WHOIS_SERVERS['IANA']['hostname'],
+            socket.getservbyname(
+                'whois',
+                'tcp'
+            ),
+            query
+        )
+        referral = self.parse_iana_referral(ret)
+        if not referral:
+            return ret
+        return referral
+
+    def _guess_by_asn(self, asn):
+        for asrange, refhost in WC_ASN_MAPPING.items():
+            if '-' not in asrange and (int(asrange) == int(asn)):
+                self.args.host = refhost
+                break
+            if '-' in asrange:
+                rangeparts = asrange.split('-')
+                lpart = int(rangeparts[0])
+                rpart = int(rangeparts[1])
+                if (lpart <= int(asn)) and (int(asn) <= rpart):
+                    self.args.host = refhost
+                    break
+        if not self.args.host:
+            self.args.host = WC_WHOIS_SERVERS['IANA']['hostname']
+
+    def _guess_whois_server(self):  # pylint: disable=too-many-branches
+        """
+        Here we take semi-educated guesses of where to query
+        """
+        if ' ' in self.args.query:
+            self.args.type = 'raw'
+            return
+
+        # Detect IDN domain names
+        try:
+            self.args.query.encode('ascii')
+        except UnicodeEncodeError:
+            self.args.query = pyunycode.convert(self.args.query)
+
+        asn_match = re.fullmatch(r'^[aA][sS]([0-9]+)$', self.args.query)
+        if asn_match:
+            self._guess_by_asn(asn_match.group(1))
+            self.args.type = 'asn'
+        elif validators.ipv4(self.args.query) or validators.ipv6(self.args.query):
+            for cidr, srv in WC_WHOIS_SERVERS['ipv4']['cidrs'].items():
+                if ipaddress.ip_address(self.args.query.split("/")[0]) in ipaddress.ip_network(cidr):
+                    self.args.host = srv
+            # 0.0.0.0/0 and 0.0.0.0/32 special cases
+            if self.args.query in ['0.0.0.0', '0.0.0.0/32']:
+                self.args.query = 'NET-0-0-0-0-2'
+                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
+            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('0.0.0.0/0'):
+                self.args.query = 'NET-0-0-0-0-1'
+                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
+            elif ipaddress.ip_address(self.args.query.split('/')) in ipaddress.ip_network('224.0.0.0/3'):
+                self.args.host = WC_WHOIS_SERVERS['ARIN']['hostname']
+            if not self.args.host:
+                # TODO: This is not guaranteed to work all the time, there's lots of
+                # corner cases, like JP-NIC, BR-NIC etc...
+                self.args.host = self._get_iana_referral_server(self.args.query)
+            self.args.type = 'ip'
+        elif validators.domain(self.args.query.lower()):
+            self.args.query = self.args.query.lower()
+            self.args.type = 'domain'
+            tld = self.args.query.split(".")[-1]
+            if f"tld_{tld}" in WC_WHOIS_SERVERS.keys():  # pylint: disable=consider-iterating-dictionary
+                self.args.host = WC_WHOIS_SERVERS[f"tld_{tld}"]['hostname']
+            else:
+                self.args.host = self._get_iana_referral_server(self.args.query)
+        elif 'RIPE' in self.args.query:  # Highly likely a RIPE DB resource
+            self.args.host = WC_WHOIS_SERVERS['RIPE']['hostname']
+            self.args.type = 'raw'
+        else:
+            self.args.type = 'raw'
