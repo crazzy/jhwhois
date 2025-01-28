@@ -21,6 +21,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+"""Argument parser for the whois client"""
 
 import argparse
 import socket
@@ -33,6 +34,7 @@ class ArgumentParser():
     As class name suggest, this is the argument parser
     """
     def __init__(self):
+        self.args = None
         self.parser = argparse.ArgumentParser(
             add_help=False,
             description='jhwhois - Modern whois client',
@@ -62,7 +64,7 @@ class ArgumentParser():
             '-v', '--version',
             help="Show program's version number",
             action='version',
-            version='%(prog)s {}'.format(__version__)
+            version=f'%(prog)s {__version__}'
         )
         self.parser.add_argument(
             'query',
@@ -70,6 +72,7 @@ class ArgumentParser():
         )
 
     def run(self):
+        """Runs argument parsing"""
         # Parse args and check for eventual issues
         self.args = self.parser.parse_args()
         if self.args.help:
@@ -86,4 +89,5 @@ class ArgumentParser():
         return self.args
 
     def show_help(self):
+        """Helper function to trigger the help printing"""
         self.parser.print_help()

@@ -21,18 +21,20 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+"""All of the custom exceptions are here"""
+
 
 class WCException(Exception):
-    pass
+    """Generic base exception"""
 
 
 class WCConnectionFailedException(WCException):
-    pass
+    """Exception for when connectivity fails"""
 
 
 class WCDNSLookupFailedException(WCException):
-    pass
+    """Exception for when DNS lookup fails"""
 
 
 class WCReferralNotFoundException(WCException):
-    pass
+    """Exception for when an expected referral isn't found"""
